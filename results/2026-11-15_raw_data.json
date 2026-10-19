@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "recommendation": {
+    "recommended_city": "제주",
+    "weather": "정보 확인 불가",
+    "events": [],
+    "reason": "기본 추천 지역으로 대체되었습니다."
+  },
+  "restaurants": [],
+  "errors": [
+    {
+      "step": "llm_recommendation",
+      "type": "PARSE_ERROR",
+      "message": "404 NOT_FOUND. {'error': {'code': 404, 'message': 'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started).', 'status': 'NOT_FOUND'}}"
+    },
+    {
+      "step": "place_search",
+      "type": "AUTH_ERROR",
+      "message": "HTTP 403"
+    },
+    {
+      "step": "llm_report",
+      "type": "GEN_ERROR",
+      "message": "404 NOT_FOUND. {'error': {'code': 404, 'message': 'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started).', 'status': 'NOT_FOUND'}}"
+    }
+  ]
+}
