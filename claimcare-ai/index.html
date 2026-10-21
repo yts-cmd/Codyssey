@@ -1,0 +1,200 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>클레임케어 AI - 실손보험금 & 자기부담금 자동 계산기</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- 상단 네비게이션 헤더 -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#hero" class="nav-logo">🩺 클레임케어 AI</a>
+      <nav class="nav-menu">
+        <a href="#hero" class="nav-link">홈</a>
+        <a href="#calculator" class="nav-link">AI 보험금 계산기</a>
+        <a href="#guide" class="nav-link">실손 가이드 & FAQ</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- 섹션 1: 메인 Hero 섹션 -->
+    <section id="hero" class="section hero-section">
+      <div class="container hero-content">
+        <span class="badge">스마트 인슈어테크 AI</span>
+        <h1 class="hero-title">설계사 연락 없이 30초 만에 확인하는<br><span class="highlight">내 실손보험금 & 자기부담금</span></h1>
+        <p class="hero-desc">
+          허리 통증, 도수치료, 엑스레이 등 병원 진료비 영수증을 보고 입력하세요.<br>
+          가입한 실손 세대에 맞춰 예상 지급액과 필수 제출 서류를 AI가 즉시 분석해 드립니다.
+        </p>
+        <a href="#calculator" class="btn btn-primary">지금 바로 계산해보기 ↓</a>
+      </div>
+    </section>
+
+    <!-- 섹션 2: AI 청구 계산기 섹션 -->
+    <section id="calculator" class="section calc-section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">📊 AI 실손보험금 계산기</h2>
+          <p class="section-subtitle">진료비 영수증 항목을 입력하시면 실손 약관에 근거해 자동 산출합니다.</p>
+        </div>
+
+        <div class="calc-wrapper">
+          <!-- 입력 폼 -->
+          <form id="claim-form" class="calc-form">
+            <div class="form-group">
+              <label for="treatment-type">진료 구분 <span class="required">*</span></label>
+              <select id="treatment-type" name="treatmentType" required>
+                <option value="외래 통원(정형외과/신경외과 등)" selected>외래 통원 (정형외과/통증의학과 등)</option>
+                <option value="비급여 특약 집중치료 (도수치료/체외충격파)">비급여 집중치료 (도수치료/체외충격파)</option>
+                <option value="입원 치료">입원 치료</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="generation">가입 실손의료보험 세대 <span class="required">*</span></label>
+              <select id="generation" name="generation" required>
+                <option value="4세대 (2021년 7월 이후 가입)">4세대 실손 (2021년 7월 이후 가입)</option>
+                <option value="3세대 착한실손 (2017년 4월 ~ 2021년 6월)" selected>3세대 착한실손 (2017년 4월 ~ 2021년 6월)</option>
+                <option value="1~2세대 표준화 실손 (2017년 3월 이전)">1~2세대 표준화 실손 (2017년 3월 이전)</option>
+                <option value="잘 모름 (표준 평균 기준 추정)">잘 모름 (표준 평균 기준 추정)</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col">
+                <label for="copay-cost">급여 본인부담금 (원) <span class="required">*</span></label>
+                <input type="number" id="copay-cost" name="copayCost" placeholder="예: 25000" min="0" required>
+              </div>
+              <div class="form-group col">
+                <label for="non-covered-cost">비급여 발생금액 (원) <span class="required">*</span></label>
+                <input type="number" id="non-covered-cost" name="nonCoveredCost" placeholder="예: 120000 (도수치료 등)" min="0" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="symptoms">진단명 및 치료 내용</label>
+              <input type="text" id="symptoms" name="symptoms" placeholder="예: 허리 요통으로 엑스레이 촬영 및 도수치료 1회" value="허리 요통으로 엑스레이 촬영 및 도수치료 1회">
+            </div>
+
+            <!-- 유효성 검사 경고 메시지 영역 -->
+            <div id="form-error" class="alert-box alert-error hidden"></div>
+
+            <button type="submit" id="btn-submit" class="btn btn-submit">
+              <span class="btn-text">AI 분석 및 보험금 계산하기</span>
+              <div class="spinner hidden"></div>
+            </button>
+          </form>
+
+          <!-- 로딩 인디케이터 -->
+          <div id="loading-box" class="loading-container hidden">
+            <div class="pulse-loader"></div>
+            <p class="loading-title">AI가 실손 약관과 공제 기준을 정밀 분석 중입니다...</p>
+            <p class="loading-desc">약 5~10초 정도 소요될 수 있습니다. 창을 닫지 마세요.</p>
+          </div>
+
+          <!-- 결과 출력 카드 -->
+          <div id="result-box" class="result-container hidden">
+            <div class="result-card">
+              <div class="result-header">
+                <h3>📋 AI 실손보험금 분석 리포트</h3>
+                <span class="result-badge">분석 완료</span>
+              </div>
+
+              <!-- 요약 카드 3종 -->
+              <div class="metric-grid">
+                <div class="metric-card">
+                  <div class="metric-label">총 진료비</div>
+                  <div id="res-total-cost" class="metric-value">0원</div>
+                </div>
+                <div class="metric-card deduct">
+                  <div class="metric-label">공제 자기부담금</div>
+                  <div id="res-deductible" class="metric-value">0원</div>
+                </div>
+                <div class="metric-card payout">
+                  <div class="metric-label">예상 지급 보험금</div>
+                  <div id="res-payout" class="metric-value highlight-payout">0원</div>
+                </div>
+              </div>
+
+              <!-- 계산 상세 근거 -->
+              <div class="detail-section">
+                <h4>💡 자기부담금 및 산출 근거</h4>
+                <p id="res-basis" class="basis-text"></p>
+              </div>
+
+              <!-- 필요 서류 -->
+              <div class="detail-section">
+                <h4>📄 필수 제출 서류 체크리스트</h4>
+                <ul id="res-documents" class="doc-list"></ul>
+              </div>
+
+              <!-- 꿀팁 -->
+              <div class="detail-section">
+                <h4>⭐ 손해사정 AI 어드바이저 팁</h4>
+                <ul id="res-tips" class="tip-list"></ul>
+              </div>
+
+              <button type="button" id="btn-recalc" class="btn btn-secondary">다시 계산하기</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 섹션 3: 실손 가이드 & FAQ 섹션 -->
+    <section id="guide" class="section guide-section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">📚 실손보험 세대별 공제 가이드 & FAQ</h2>
+          <p class="section-subtitle">내가 가입한 보험 세대별 자기부담금 비율과 필수 상식을 확인하세요.</p>
+        </div>
+
+        <div class="guide-grid">
+          <div class="guide-card">
+            <span class="gen-tag">4세대 실손 (2021.7~)</span>
+            <h3>비급여 이용량에 따른 할인/할증</h3>
+            <p><strong>급여 20%, 비급여 30%</strong> 자기부담금 공제. 비급여(도수치료 등) 청구액이 100만 원 이상일 경우 갱신 시 보험료가 할증될 수 있습니다.</p>
+          </div>
+          <div class="guide-card">
+            <span class="gen-tag">3세대 착한실손 (2017.4~2021.6)</span>
+            <h3>비급여 특약 분리 운영</h3>
+            <p><strong>급여 10~20%, 비급여 20~30%</strong> 공제. 도수치료·체외충격파는 1회당 2만 원 또는 30% 중 큰 금액을 공제하며 1년 최대 50회(350만 원)까지 보장됩니다.</p>
+          </div>
+          <div class="guide-card">
+            <span class="gen-tag">1~2세대 실손 (~2017.3)</span>
+            <h3>낮은 자기부담금 구조</h3>
+            <p>통원 1회당 의원 1만 원, 종합병원 1.5만 원 등 <strong>고정 정액 공제</strong> 위주라 환급률이 높지만, 갱신 시 보험료 인상 폭이 큽니다.</p>
+          </div>
+        </div>
+
+        <!-- FAQ 아코디언/카드 -->
+        <div class="faq-list">
+          <div class="faq-item">
+            <h4>Q. 도수치료 영수증만 내면 보험금이 바로 나오나요?</h4>
+            <p>아닙니다. 단순 영수증 외에 반드시 항목별 단가가 적힌 <strong>'진료비 세부내역서'</strong>와 의사의 질병분류기호가 적힌 <strong>'처방전 또는 확인서'</strong>가 필수입니다.</p>
+          </div>
+          <div class="faq-item">
+            <h4>Q. 병원에서 서류 뗄 때 비용이 드나요?</h4>
+            <p>진료비 계산서·영수증과 진료비 세부내역서는 <strong>무료 발급</strong>이 법적 원칙입니다. 유료인 진단서 대신 무료인 '질병코드가 찍힌 처방전'을 먼저 활용하세요.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-content">
+      <p>© 2026 클레임케어 AI (ClaimCare AI). All rights reserved.</p>
+      <p class="disclaimer">본 서비스에서 제공하는 계산 결과는 실손의료보험 표준 약관을 기반으로 한 추정치이며, 실제 보험금 지급 여부 및 최종 지급액은 각 보험사의 심사 기준에 따라 달라질 수 있습니다.</p>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
