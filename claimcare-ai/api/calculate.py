@@ -24,6 +24,7 @@ def generate_insurance_claim(data: dict) -> dict:
     if not api_key:
         raise ValueError("GEMINI_API_KEY가 환경변수에 설정되지 않았습니다.")
 
+    print("\n[AI 엔진] 1. Gemini 클라이언트 초기화...")
     client = genai.Client(api_key=api_key)
     
     images = data.get("images", [])
@@ -34,6 +35,7 @@ def generate_insurance_claim(data: dict) -> dict:
     generation = data.get("generation", "1~2세대 표준화 실손 (2017년 3월 이전)")
 
     if images:
+        print(f"[AI 엔진] 2. 이미지 {len(images)}장 디코딩 준비...")
         contents_parts = []
         for img_str in images:
             mime_type = "image/jpeg"
@@ -51,8 +53,8 @@ def generate_insurance_claim(data: dict) -> dict:
                 )
             )
 
-        prompt = """당신은 대한민국 진료비 영수증 전문 고속 OCR 분석 AI입니다.
-첨부된 영수증들을 보고 다음 JSON 형식으로만 즉시 출력하세요 (생각 과정 없이 바로 JSON만 출력):
+        prompt = """당신은 대한민국 진료비 영수증 전문 OCR 분석 AI입니다.
+첨부된 영수증들을 판독하여 다음 JSON 형식으로만 즉시 응답하세요 (백틱이나 부가설명 없이 JSON만 출력):
 
 {
   "daily_breakdown": [
@@ -63,7 +65,7 @@ def generate_insurance_claim(data: dict) -> dict:
       "copay": 7000,
       "non_covered": 200000,
       "excluded_fees": 0,
-      "description": "요추 MRI"
+      "description": "요추 MRI 검사"
     },
     {
       "date": "2026-10-19",
@@ -72,7 +74,7 @@ def generate_insurance_claim(data: dict) -> dict:
       "copay": 6400,
       "non_covered": 0,
       "excluded_fees": 0,
-      "description": "처방약제비"
+      "description": "처방 약제비"
     },
     {
       "date": "2026-10-20",
@@ -81,7 +83,7 @@ def generate_insurance_claim(data: dict) -> dict:
       "copay": 99100,
       "non_covered": 91000,
       "excluded_fees": 3000,
-      "description": "신경차단술 및 주사 (서류발급비 3,000원)"
+      "description": "신경차단술 및 주사치료 (서류발급비 3,000원)"
     }
   ],
   "symptoms": "요추 추간판탈출증/요통 (MRI 검사 및 신경차단술, 약국 처방)",
@@ -93,55 +95,43 @@ def generate_insurance_claim(data: dict) -> dict:
   ],
   "advisor_tips": [
     "제증명서 발급비용은 실손 약관상 보상 제외 항목입니다.",
-    "처방조제 약제비는 1일 공제금액(8,000원) 미만 시 지급 제외됩니다.",
+    "처방조제 약제비는 1일 공제금액(8,000원) 미만 시 지급 대상에서 제외됩니다.",
     "통원 진료는 방문 일자별로 각각 15,000원씩 독립 공제됩니다."
   ]
 }
 """
         contents_parts.append(prompt)
-        
-        # thinking_budget=0 설정으로 생각 과정 생략 및 즉시 응답 유도
-        config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-            temperature=0.1
-        )
 
-        # -------------------------------------------------------------
-        # [503 트래픽 과부하 대비 3단계 자동 대체(Fallback) 호출 로직]
-        # -------------------------------------------------------------
+        # 404 에러가 없는 정식 지원 모델명 목록
+        candidate_models = ["gemini-2.5-flash", "gemini-1.5-flash"]
         response = None
-        try:
-            # 1순위: gemini-3.8-flash (초고속)
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=contents_parts,
-                config=config
-            )
-        except Exception as api_err:
-            err_str = str(api_err)
-            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
-                time.sleep(1)  # 1초 대기 후 전환
-                try:
-                    # 2순위: gemini-3.8-pro
-                    response = client.models.generate_content(
-                        model="gemini-3.8-pro",
-                        contents=contents_parts,
-                        config=types.GenerateContentConfig(temperature=0.1)
-                    )
-                except Exception:
-                    # 3순위: gemini-3-flash
-                    response = client.models.generate_content(
-                        model="gemini-3-flash",
-                        contents=contents_parts,
-                        config=types.GenerateContentConfig(temperature=0.1)
-                    )
-            else:
-                raise api_err
+        last_error = None
+
+        print("[AI 엔진] 3. Gemini API 모델 호출 시작...")
+        start_time = time.time()
+
+        for model_name in candidate_models:
+            try:
+                print(f"[AI 엔진] ➡️ '{model_name}' 모델 시도 중...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents_parts,
+                    config=types.GenerateContentConfig(temperature=0.1)
+                )
+                print(f"[AI 엔진] ✅ '{model_name}' 응답 수신 완료! (소요시간: {time.time() - start_time:.2f}초)")
+                break
+            except Exception as e:
+                print(f"[AI 엔진] ⚠️ '{model_name}' 호출 실패: {e}")
+                last_error = e
+                time.sleep(1)
+
+        if not response:
+            raise RuntimeError(f"모든 지원 모델 호출에 실패했습니다: {last_error}")
 
         ai_data = extract_json(response.text)
 
         # -------------------------------------------------------------
-        # [파이썬 손해사정 확정 계산 엔진 - 오차 없는 정밀 계산]
+        # [파이썬 손해사정 확정 계산 로직]
         # -------------------------------------------------------------
         daily_list = ai_data.get("daily_breakdown", [])
         total_cost = 0
@@ -163,7 +153,6 @@ def generate_insurance_claim(data: dict) -> dict:
             claimable = max(0, cost - excluded)
 
             if item_type == "pharmacy":
-                # 처방조제 약제비: 8,000원 공제
                 if claimable > 8000:
                     payout = claimable - 8000
                     basis_logs.append(f"{dt} 약국 {cost:,}원 (8,000원 공제 후 {payout:,}원)")
@@ -171,7 +160,6 @@ def generate_insurance_claim(data: dict) -> dict:
                     payout = 0
                     basis_logs.append(f"{dt} 약국 {cost:,}원 (8,000원 미달 부지급)")
             else:
-                # 병원 외래 공제 적용
                 deduct = 15000
                 if "4세대" in generation:
                     deduct = max(int(item.get("copay", 0) * 0.2) + int(item.get("non_covered", 0) * 0.3), 20000)
@@ -186,6 +174,8 @@ def generate_insurance_claim(data: dict) -> dict:
 
         total_deductible = total_cost - total_payout
         payout_ratio = round((total_payout / total_cost) * 100) if total_cost > 0 else 0
+
+        print(f"[AI 엔진] 4. 최종 정산 완료 -> 총비용: {total_cost:,}원 / 환급금: {total_payout:,}원")
 
         return {
             "ocr_detected": {
@@ -251,7 +241,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            err_res = {"error": str(e), "message": f"오류 발생: {str(e)}"}
+            err_res = {"error": str(e), "message": f"분석 오류: {str(e)}"}
             self.wfile.write(json.dumps(err_res, ensure_ascii=False).encode('utf-8'))
 
     def do_OPTIONS(self):
