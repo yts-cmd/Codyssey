@@ -3,54 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>클레임케어 AI - 실손보험금 & 자기부담금 자동 계산기</title>
+  <title>클레임케어 AI - 영수증 OCR & 실손보험금 계산기</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <!-- 상단 네비게이션 헤더 -->
   <header class="navbar">
     <div class="nav-container">
       <a href="#hero" class="nav-logo">🩺 클레임케어 AI</a>
       <nav class="nav-menu">
         <a href="#hero" class="nav-link">홈</a>
-        <a href="#calculator" class="nav-link">AI 보험금 계산기</a>
+        <a href="#calculator" class="nav-link">AI 영수증 분석 & 계산기</a>
         <a href="#guide" class="nav-link">실손 가이드 & FAQ</a>
       </nav>
     </div>
   </header>
 
   <main>
-    <!-- 섹션 1: 메인 Hero 섹션 -->
     <section id="hero" class="section hero-section">
       <div class="container hero-content">
-        <span class="badge">스마트 인슈어테크 AI</span>
-        <h1 class="hero-title">설계사 연락 없이 30초 만에 확인하는<br><span class="highlight">내 실손보험금 & 자기부담금</span></h1>
+        <span class="badge">다중 영수증 OCR + 인슈어테크 AI</span>
+        <h1 class="hero-title">영수증 사진만 올리면 30초 만에 끝나는<br><span class="highlight">내 실손보험금 & 자기부담금 분석</span></h1>
         <p class="hero-desc">
-          허리 통증, 도수치료, 엑스레이 등 병원 진료비 영수증을 보고 입력하세요.<br>
-          가입한 실손 세대에 맞춰 예상 지급액과 필수 제출 서류를 AI가 즉시 분석해 드립니다.
+          병원 진료비 영수증, 세부내역서, 처방전 사진을 여러 장 올려보세요.<br>
+          AI가 급여·비급여 금액을 한 번에 종합 판독하여 예상 환급금을 계산해 드립니다.
         </p>
-        <a href="#calculator" class="btn btn-primary">지금 바로 계산해보기 ↓</a>
+        <a href="#calculator" class="btn btn-primary">영수증 사진 올리고 계산하기 ↓</a>
       </div>
     </section>
 
-    <!-- 섹션 2: AI 청구 계산기 섹션 -->
     <section id="calculator" class="section calc-section">
       <div class="container">
         <div class="section-header">
-          <h2 class="section-title">📊 AI 실손보험금 계산기</h2>
-          <p class="section-subtitle">진료비 영수증 항목을 입력하시면 실손 약관에 근거해 자동 산출합니다.</p>
+          <h2 class="section-title">📊 AI 다중 영수증 OCR & 실손보험금 계산기</h2>
+          <p class="section-subtitle">영수증·세부내역서 사진을 여러 장 첨부하거나 직접 숫자를 입력하여 계산할 수 있습니다.</p>
         </div>
 
         <div class="calc-wrapper">
-          <!-- 입력 폼 -->
           <form id="claim-form" class="calc-form">
+            <!-- [다중 업로드 지원] multiple 속성 추가 -->
+            <div class="form-group">
+              <label>📷 진료비 영수증 / 세부내역서 사진 (여러 장 선택 가능)</label>
+              <div id="drop-zone" class="upload-zone">
+                <input type="file" id="file-input" accept="image/*" multiple class="file-input-hidden">
+                <div id="upload-prompt">
+                  <div class="upload-icon">📑</div>
+                  <p class="upload-text"><strong>클릭하여 사진들을 선택</strong>하거나 여기로 드래그하세요</p>
+                  <p class="upload-sub">영수증, 세부내역서, 처방전 등 여러 장 동시 선택 가능 (JPG, PNG)</p>
+                </div>
+                <div id="preview-container" class="preview-grid hidden"></div>
+                <div id="preview-controls" class="preview-controls hidden">
+                  <span id="file-count-text">총 0장 첨부됨</span>
+                  <button type="button" id="btn-clear-all" class="btn-clear">전체 삭제</button>
+                </div>
+              </div>
+            </div>
+
             <div class="form-group">
               <label for="treatment-type">진료 구분 <span class="required">*</span></label>
               <select id="treatment-type" name="treatmentType" required>
-                <option value="외래 통원(정형외과/신경외과 등)" selected>외래 통원 (정형외과/통증의학과 등)</option>
+                <option value="외래 통원(정형외과/통증의학과 등)" selected>외래 통원 (정형외과/통증의학과 등)</option>
                 <option value="비급여 특약 집중치료 (도수치료/체외충격파)">비급여 집중치료 (도수치료/체외충격파)</option>
                 <option value="입원 치료">입원 치료</option>
               </select>
@@ -68,12 +79,12 @@
 
             <div class="form-row">
               <div class="form-group col">
-                <label for="copay-cost">급여 본인부담금 (원) <span class="required">*</span></label>
-                <input type="number" id="copay-cost" name="copayCost" placeholder="예: 25000" min="0" required>
+                <label for="copay-cost">급여 본인부담금 (원) <small class="text-hint">(사진 첨부 시 비워도 자동 판독)</small></label>
+                <input type="number" id="copay-cost" name="copayCost" placeholder="예: 25000" min="0" value="25000">
               </div>
               <div class="form-group col">
-                <label for="non-covered-cost">비급여 발생금액 (원) <span class="required">*</span></label>
-                <input type="number" id="non-covered-cost" name="nonCoveredCost" placeholder="예: 120000 (도수치료 등)" min="0" required>
+                <label for="non-covered-cost">비급여 발생금액 (원) <small class="text-hint">(사진 첨부 시 비워도 자동 판독)</small></label>
+                <input type="number" id="non-covered-cost" name="nonCoveredCost" placeholder="예: 120000 (도수치료 등)" min="0" value="120000">
               </div>
             </div>
 
@@ -82,23 +93,19 @@
               <input type="text" id="symptoms" name="symptoms" placeholder="예: 허리 요통으로 엑스레이 촬영 및 도수치료 1회" value="허리 요통으로 엑스레이 촬영 및 도수치료 1회">
             </div>
 
-            <!-- 유효성 검사 경고 메시지 영역 -->
             <div id="form-error" class="alert-box alert-error hidden"></div>
 
             <button type="submit" id="btn-submit" class="btn btn-submit">
-              <span class="btn-text">AI 분석 및 보험금 계산하기</span>
-              <div class="spinner hidden"></div>
+              <span class="btn-text">AI 종합 분석 및 보험금 계산하기</span>
             </button>
           </form>
 
-          <!-- 로딩 인디케이터 -->
           <div id="loading-box" class="loading-container hidden">
             <div class="pulse-loader"></div>
-            <p class="loading-title">AI가 실손 약관과 공제 기준을 정밀 분석 중입니다...</p>
-            <p class="loading-desc">약 5~10초 정도 소요될 수 있습니다. 창을 닫지 마세요.</p>
+            <p id="loading-title" class="loading-title">AI가 첨부된 사진들과 실손 약관을 종합 분석 중입니다...</p>
+            <p class="loading-desc">여러 장의 영수증 OCR 판독 및 공제 계산에 약 5~15초 소요됩니다.</p>
           </div>
 
-          <!-- 결과 출력 카드 -->
           <div id="result-box" class="result-container hidden">
             <div class="result-card">
               <div class="result-header">
@@ -106,10 +113,14 @@
                 <span class="result-badge">분석 완료</span>
               </div>
 
-              <!-- 요약 카드 3종 -->
+              <div id="ocr-banner" class="ocr-banner hidden">
+                <strong>📸 AI 영수증 종합 인식 결과:</strong>
+                <span id="ocr-info"></span>
+              </div>
+
               <div class="metric-grid">
                 <div class="metric-card">
-                  <div class="metric-label">총 진료비</div>
+                  <div class="metric-label">총 발생 진료비</div>
                   <div id="res-total-cost" class="metric-value">0원</div>
                 </div>
                 <div class="metric-card deduct">
@@ -122,19 +133,16 @@
                 </div>
               </div>
 
-              <!-- 계산 상세 근거 -->
               <div class="detail-section">
-                <h4>💡 자기부담금 및 산출 근거</h4>
+                <h4>💡 자기부담금 산출 근거</h4>
                 <p id="res-basis" class="basis-text"></p>
               </div>
 
-              <!-- 필요 서류 -->
               <div class="detail-section">
                 <h4>📄 필수 제출 서류 체크리스트</h4>
                 <ul id="res-documents" class="doc-list"></ul>
               </div>
 
-              <!-- 꿀팁 -->
               <div class="detail-section">
                 <h4>⭐ 손해사정 AI 어드바이저 팁</h4>
                 <ul id="res-tips" class="tip-list"></ul>
@@ -147,7 +155,6 @@
       </div>
     </section>
 
-    <!-- 섹션 3: 실손 가이드 & FAQ 섹션 -->
     <section id="guide" class="section guide-section">
       <div class="container">
         <div class="section-header">
@@ -173,7 +180,6 @@
           </div>
         </div>
 
-        <!-- FAQ 아코디언/카드 -->
         <div class="faq-list">
           <div class="faq-item">
             <h4>Q. 도수치료 영수증만 내면 보험금이 바로 나오나요?</h4>
