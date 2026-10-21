@@ -17,10 +17,10 @@
   const formError = document.getElementById('form-error');
   const btnSubmit = document.getElementById('btn-submit');
   const loadingBox = document.getElementById('loading-box');
+  const loadingTitle = document.getElementById('loading-title');
   const resultBox = document.getElementById('result-box');
   const btnRecalc = document.getElementById('btn-recalc');
 
-  // 여러 장의 base64 이미지 데이터를 보관하는 배열
   let uploadedImages = [];
 
   const formatWon = (num) => new Intl.NumberFormat('ko-KR').format(num) + '원';
@@ -36,15 +36,50 @@
     formError.classList.add('hidden');
   };
 
-  // 업로드 영역 클릭 시 파일 창 열기
+  // 이미지 초고속 압축 함수 (OCR 판독 해상도 1200px 유지, 용량 90% 압축)
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const maxDim = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // 0.8 품질 JPEG로 압축하여 대폭 경량화
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
   dropZone.addEventListener('click', (e) => {
-    if (e.target.closest('#btn-clear-all') || e.target.closest('.preview-remove-btn')) {
-      return;
-    }
+    if (e.target.closest('#btn-clear-all') || e.target.closest('.preview-remove-btn')) return;
     fileInput.click();
   });
 
-  // 드래그 앤 드롭 지원
   dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropZone.style.borderColor = 'var(--primary)';
@@ -66,8 +101,7 @@
     }
   });
 
-  // 여러 파일 순회하며 base64 읽기
-  const processFiles = (files) => {
+  const processFiles = async (files) => {
     clearError();
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
     if (imageFiles.length === 0) {
@@ -75,24 +109,20 @@
       return;
     }
 
-    let loadedCount = 0;
-    imageFiles.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
+    for (const file of imageFiles) {
+      try {
+        const compressedData = await compressImage(file);
         uploadedImages.push({
           name: file.name,
-          data: event.target.result
+          data: compressedData
         });
-        loadedCount++;
-        if (loadedCount === imageFiles.length) {
-          renderPreviews();
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error('이미지 압축 실패:', err);
+      }
+    }
+    renderPreviews();
   };
 
-  // 썸네일 그리드 렌더링
   const renderPreviews = () => {
     previewContainer.innerHTML = '';
     if (uploadedImages.length === 0) {
@@ -118,7 +148,6 @@
       previewContainer.appendChild(item);
     });
 
-    // 개별 삭제 버튼 이벤트 바인딩
     document.querySelectorAll('.preview-remove-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -129,14 +158,12 @@
     });
   };
 
-  // 전체 삭제
   btnClearAll.addEventListener('click', (e) => {
     e.stopPropagation();
     uploadedImages = [];
     renderPreviews();
   });
 
-  // 폼 제출
   claimForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearError();
@@ -155,8 +182,8 @@
     claimForm.classList.add('hidden');
     resultBox.classList.add('hidden');
     loadingBox.classList.remove('hidden');
+    loadingTitle.textContent = `AI가 첨부된 ${uploadedImages.length}장의 서류와 약관을 고속 분석 중입니다...`;
 
-    // 다중 이미지 데이터 배열(base64 문자열 목록) 전송
     const payload = {
       treatmentType: treatmentTypeSelect.value,
       generation: generationSelect.value,

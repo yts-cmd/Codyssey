@@ -10,13 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 로컬 약관 데이터베이스 로드 함수
 def load_clauses_db() -> dict:
-    # api/calculate.py 위치 기준 상위 폴더의 clauses_db.json 탐색
     base_dir = Path(__file__).resolve().parent.parent
     db_path = base_dir / "clauses_db.json"
-    
-    # 배포 환경 또는 경로 대비 예외 처리
     if not db_path.exists():
         db_path = Path("clauses_db.json")
 
@@ -24,56 +20,6 @@ def load_clauses_db() -> dict:
         with open(db_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
-
-# 1차 로컬 DB 검색 및 정량 약관 산출기
-def query_local_clause(db: dict, generation: str, treatment_type: str, copay_cost: int, non_covered_cost: int) -> dict:
-    gen_key = "4세대"
-    if "3세대" in generation:
-        gen_key = "3세대"
-    elif "1~2세대" in generation or "2세대" in generation or "1세대" in generation:
-        gen_key = "1_2세대"
-
-    gen_info = db.get("generations", {}).get(gen_key, {})
-    
-    # 1차 공제 규칙 매칭
-    is_special = "도수치료" in treatment_type or "체외충격파" in treatment_type
-    
-    if gen_key == "4세대":
-        # 4세대: 급여 20%, 비급여 30% (통원 최소공제 적용)
-        copay_deduct = max(int(copay_cost * 0.20), 10000) if copay_cost > 0 else 0
-        non_covered_deduct = max(int(non_covered_cost * 0.30), 30000) if non_covered_cost > 0 else 0
-        deductible_total = copay_deduct + non_covered_deduct
-    elif gen_key == "3세대":
-        # 3세대: 급여 10~20%, 비급여 20% (도수치료 특약은 30% 또는 2만원 중 큰 금액)
-        copay_deduct = max(int(copay_cost * 0.10), 10000) if copay_cost > 0 else 0
-        if is_special:
-            non_covered_deduct = max(int(non_covered_cost * 0.30), 20000) if non_covered_cost > 0 else 0
-        else:
-            non_covered_deduct = max(int(non_covered_cost * 0.20), 15000) if non_covered_cost > 0 else 0
-        deductible_total = copay_deduct + non_covered_deduct
-    else:
-        # 1~2세대: 고정 공제 위주 (통원 1만~1.5만)
-        deductible_total = min(15000, copay_cost + non_covered_cost) if (copay_cost + non_covered_cost) > 0 else 0
-
-    total_cost = copay_cost + non_covered_cost
-    expected_payout = max(0, total_cost - deductible_total)
-
-    # 필요 서류 매핑
-    docs = list(db.get("required_documents_guide", {}).get("기본_통원", []))
-    if is_special or non_covered_cost > 0:
-        docs.extend(db.get("required_documents_guide", {}).get("비급여특약_추가", []))
-    if "입원" in treatment_type:
-        docs.extend(db.get("required_documents_guide", {}).get("입원_추가", []))
-
-    return {
-        "clause_matched": gen_info,
-        "pre_calculated": {
-            "total_cost": total_cost,
-            "deductible_amount": deductible_total,
-            "expected_payout": expected_payout
-        },
-        "standard_documents": docs
-    }
 
 def extract_json(text: str) -> dict:
     match = re.search(r'\{.*\}', text, re.DOTALL)
@@ -95,16 +41,21 @@ def generate_insurance_claim(data: dict) -> dict:
         images = [data.get("imageData")]
 
     treatment_type = data.get("treatmentType", "외래 통원")
-    generation = data.get("generation", "4세대")
+    generation = data.get("generation", "1~2세대 표준화 실손")
     copay_cost = int(data.get("copayCost", 0))
     non_covered_cost = int(data.get("nonCoveredCost", 0))
     symptoms = data.get("symptoms", "")
 
-    # [단계 1] 로컬 JSON DB에서 1차 약관 데이터 검색 및 기준 산출
+    # 1. 로컬 약관 DB 로드
     db = load_clauses_db()
-    local_review = query_local_clause(db, generation, treatment_type, copay_cost, non_covered_cost)
+    gen_key = "1_2세대"
+    if "4세대" in generation:
+        gen_key = "4세대"
+    elif "3세대" in generation:
+        gen_key = "3세대"
+    matched_clause = db.get("generations", {}).get(gen_key, {})
 
-    # [단계 2] Gemini API를 활용한 2차 심층 검토 (영수증 OCR 판독 + 로컬 약관 기준 교차 검증)
+    # 2. Gemini 멀티모달 프롬프트 구성
     if images:
         contents_parts = []
         for img_str in images:
@@ -123,37 +74,50 @@ def generate_insurance_claim(data: dict) -> dict:
                 )
             )
 
-        prompt = f"""당신은 병원 진료비 영수증 전문 다중 문서 OCR 및 실손보험 보상 심사 손해사정 AI입니다.
-우선 내부 데이터베이스에서 검색된 [해당 약관 기준]을 엄격히 준수하여 최종 심사를 진행하세요.
+        prompt = f"""당신은 병원 진료비 영수증/진료비 세부내역서/약국 영수증 전문 대한민국 손해사정 심사관 AI입니다.
+첨부된 {len(images)}장의 서류 이미지들을 상호 대조하고, 내부 데이터베이스 약관 기준을 적용하여 정밀 심사 및 계산을 수행하세요.
 
-[로컬 DB에서 검색된 약관 기준 및 1차 산출치]
-- 적용 상품: {local_review['clause_matched'].get('name', generation)}
-- 약관 공제 규칙: {json.dumps(local_review['clause_matched'].get('deductible_rule', {}), ensure_ascii=False)}
-- 비급여 특약 기준: {json.dumps(local_review['clause_matched'].get('special_treatments', {}), ensure_ascii=False)}
-- 1차 계산 예상치: 총진료비 {local_review['pre_calculated']['total_cost']}원, 자기부담금 {local_review['pre_calculated']['deductible_amount']}원, 예상환급금 {local_review['pre_calculated']['expected_payout']}원
+[내부 DB 약관 기준: {matched_clause.get('name', generation)}]
+{json.dumps(matched_clause, ensure_ascii=False, indent=2)}
 
-[지침]
-1. 첨부된 {len(images)}장의 서류(영수증/세부내역서)에서 실제 급여 본인부담금과 비급여 발생금액 총합, 진단 치료명을 정밀 판독(OCR)하세요.
-2. 판독된 금액이 사용자의 입력값과 차이가 있다면 영수증 실금액을 우선하여 위의 [로컬 DB 약관 기준]에 따라 자기부담금과 환급금을 재조정하세요.
-3. 반드시 아래 JSON 형식으로만 응답하세요 (백틱 없이 JSON만 출력):
+★ [손해사정 실무 심사 및 계산 핵심 원칙 - 엄격 준수] ★
+1. 진료 일자별(Day-by-Day) 독립 공제:
+   - 외래 통원은 여러 날짜의 영수증 금액을 단순 합산하여 1회만 공제하면 절대 안 됩니다.
+   - 영수증 상의 '진료 일자'별로 그룹화하여, 방문 일자마다 각각 1회씩 통원 자기부담금(병원급 15,000원, 의원 10,000원 등)을 독립 차감하세요.
+2. 보상 제외 항목 엄격 분리:
+   - 영수증 내 '제증명료', '진료확인서/진단서/소견서 발급비'(예: 3,000원 등)는 의료비가 아니므로 보상 대상 금액에서 전액 제외하세요.
+3. 원외처방 약제비 분리 심사:
+   - 약국 영수증 조제비는 병원비와 합산하지 말고 별도로 심사하세요.
+   - 약제비 발생금액이 1일 최소 공제금액(8,000원) 미만(예: 6,400원)인 경우 지급 보험금은 0원(청구 실익 없음)으로 계산하세요.
+4. 환자 실부담액 정합성:
+   - 총 발생비용 = 모든 영수증 총액
+   - 예상 지급 보험금 = 각 일자별 (보상대상액 - 일자별 공제금)의 합계
+   - 공제 자기부담금 = 총 발생비용 - 예상 지급 보험금 (보상제외 서류비, 일자별 공제금, 약제비 공제 미달분 포함)
 
+반드시 아래 JSON 형식으로만 응답하세요 (백틱 없이 JSON만 출력):
 {{
   "ocr_detected": {{
-    "copay_cost": 25000,
-    "non_covered_cost": 120000,
-    "symptoms": "요통, 방사선 검사, 도수치료"
+    "copay_cost": 106100,
+    "non_covered_cost": 291000,
+    "symptoms": "요추 추간판탈출증/요통(MRI 검사), 신경차단술 주사치료, 약국 처방"
   }},
   "summary": {{
-    "total_cost": 145000,
-    "deductible_amount": 39000,
-    "expected_payout": 106000,
-    "payout_ratio": 73
+    "total_cost": 406500,
+    "deductible_amount": 39400,
+    "expected_payout": 367100,
+    "payout_ratio": 90
   }},
-  "calculation_basis": "로컬 약관 DB ({generation})의 공제율과 영수증상 급여/비급여 실금액을 대조하여 산출했습니다.",
-  "required_documents": {json.dumps(local_review['standard_documents'], ensure_ascii=False)},
+  "calculation_basis": "일자별 독립 공제 및 보상 제외 항목 정밀 산출 내역 요약 (예: 10/19 병원 207,000원 - 공제 15,000원 = 192,000원 / 10/19 약국 6,400원 공제 8,000원 미달 부지급 / 10/20 병원 193,100원 중 서류비 3,000원 제외 후 190,100원 - 공제 15,000원 = 175,100원 -> 최종 지급액 367,100원)",
+  "required_documents": [
+    "진료비 계산서·영수증 원본",
+    "진료비 세부내역서",
+    "질병분류기호(M코드) 기재된 처방전 또는 진료확인서",
+    "MRI 판독결과지"
+  ],
   "advisor_tips": [
-    "약관 DB 조회 결과 확인된 보상 한도 유의사항",
-    "보험사 현장 심사 방어 팁"
+    "제증명서 발급비용(3,000원)은 실손의료비 약관상 보상 제외 항목입니다.",
+    "약국 조제비(6,400원)는 통원 약제비 최소 공제금액(8,000원) 미만으로 지급 대상에서 제외되었습니다.",
+    "통원 진료는 방문 일자별로 각각 15,000원씩 독립 공제되었습니다."
   ]
 }}
 """
@@ -163,29 +127,21 @@ def generate_insurance_claim(data: dict) -> dict:
             contents=contents_parts
         )
     else:
-        # 사진 없이 숫자로만 직접 입력한 경우: 로컬 DB 기준을 바탕으로 AI 심사 멘트 생성
-        prompt = f"""당신은 대한민국 실손의료보험 손해사정 AI 어드바이저입니다.
-내부 약관 DB를 검색하여 산출된 결과는 다음과 같습니다:
-- 대상 약관: {local_review['clause_matched'].get('name', generation)}
-- 총 진료비: {local_review['pre_calculated']['total_cost']:,}원
-- 1차 계산 자기부담금: {local_review['pre_calculated']['deductible_amount']:,}원
-- 1차 예상 환급금: {local_review['pre_calculated']['expected_payout']:,}원
-- 진단 및 치료 내용: {symptoms}
-
-위 약관 기준을 바탕으로 산출 근거와 손해사정사 관점의 청구 조언을 작성하여 아래 JSON으로만 응답하세요:
+        # 사진 없는 수동 입력 시
+        prompt = f"""당신은 대한민국 실손보험 손해사정 심사 AI입니다.
+가입실손: {generation}, 급여: {copay_cost}원, 비급여: {non_covered_cost}원, 증상: {symptoms}
+약관 DB 기준({matched_clause.get('name', generation)})에 근거하여 예상 지급액과 공제액을 정량 계산하고 JSON으로만 응답하세요:
 {{
   "ocr_detected": null,
   "summary": {{
-    "total_cost": {local_review['pre_calculated']['total_cost']},
-    "deductible_amount": {local_review['pre_calculated']['deductible_amount']},
-    "expected_payout": {local_review['pre_calculated']['expected_payout']},
-    "payout_ratio": 70
+    "total_cost": {copay_cost + non_covered_cost},
+    "deductible_amount": 15000,
+    "expected_payout": {max(0, copay_cost + non_covered_cost - 15000)},
+    "payout_ratio": 90
   }},
-  "calculation_basis": "약관 DB 기준 상세 계산 설명",
-  "required_documents": {json.dumps(local_review['standard_documents'], ensure_ascii=False)},
-  "advisor_tips": [
-    "청구 시 유의점", "필수 확인 사항"
-  ]
+  "calculation_basis": "약관 DB 기준 산출 설명",
+  "required_documents": ["진료비 영수증", "진료비 세부내역서"],
+  "advisor_tips": ["청구 시 유의사항"]
 }}
 """
         response = client.models.generate_content(
