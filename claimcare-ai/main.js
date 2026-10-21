@@ -36,70 +36,78 @@
     formError.classList.add('hidden');
   };
 
-  // 이미지 초고속 압축 함수 (OCR 판독 해상도 1200px 유지, 용량 90% 압축)
-  const compressImage = (file) => {
-    return new Promise((resolve, reject) => {
+  // 사진 선택 클릭 및 드래그 앤 드롭
+  if (dropZone && fileInput) {
+    dropZone.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-clear-all') || e.target.closest('.preview-remove-btn')) return;
+      fileInput.click();
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--primary)';
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = '#93c5fd';
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#93c5fd';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        processFiles(Array.from(e.dataTransfer.files));
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        processFiles(Array.from(e.target.files));
+      }
+      fileInput.value = ''; // 동일 파일 재선택 가능하게 리셋
+    });
+  }
+
+  // 텍스트 식별력 보존 고속 경량 압축기
+  const ultraFastCompress = (file) => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.readAsDataURL(file);
       reader.onload = (event) => {
+        const rawData = event.target.result;
         const img = new Image();
-        img.src = event.target.result;
         img.onload = () => {
-          const maxDim = 1200;
-          let width = img.width;
-          let height = img.height;
+          try {
+            const maxDim = 800;
+            let width = img.width;
+            let height = img.height;
 
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
             }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressed = canvas.toDataURL('image/jpeg', 0.5);
+            resolve(compressed);
+          } catch (err) {
+            resolve(rawData);
           }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // 0.8 품질 JPEG로 압축하여 대폭 경량화
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          resolve(compressedDataUrl);
         };
-        img.onerror = (err) => reject(err);
+        img.onerror = () => resolve(rawData);
+        img.src = rawData;
       };
-      reader.onerror = (err) => reject(err);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
     });
   };
-
-  dropZone.addEventListener('click', (e) => {
-    if (e.target.closest('#btn-clear-all') || e.target.closest('.preview-remove-btn')) return;
-    fileInput.click();
-  });
-
-  dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = 'var(--primary)';
-  });
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.style.borderColor = '#93c5fd';
-  });
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#93c5fd';
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(Array.from(e.dataTransfer.files));
-    }
-  });
-
-  fileInput.addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processFiles(Array.from(e.target.files));
-    }
-  });
 
   const processFiles = async (files) => {
     clearError();
@@ -110,33 +118,32 @@
     }
 
     for (const file of imageFiles) {
-      try {
-        const compressedData = await compressImage(file);
+      const compressedData = await ultraFastCompress(file);
+      if (compressedData) {
         uploadedImages.push({
           name: file.name,
           data: compressedData
         });
-      } catch (err) {
-        console.error('이미지 압축 실패:', err);
       }
     }
     renderPreviews();
   };
 
   const renderPreviews = () => {
+    if (!previewContainer) return;
     previewContainer.innerHTML = '';
+
     if (uploadedImages.length === 0) {
-      uploadPrompt.classList.remove('hidden');
+      if (uploadPrompt) uploadPrompt.classList.remove('hidden');
       previewContainer.classList.add('hidden');
-      previewControls.classList.add('hidden');
-      fileInput.value = '';
+      if (previewControls) previewControls.classList.add('hidden');
       return;
     }
 
-    uploadPrompt.classList.add('hidden');
+    if (uploadPrompt) uploadPrompt.classList.add('hidden');
     previewContainer.classList.remove('hidden');
-    previewControls.classList.remove('hidden');
-    fileCountText.textContent = `총 ${uploadedImages.length}장의 사진이 첨부되었습니다.`;
+    if (previewControls) previewControls.classList.remove('hidden');
+    if (fileCountText) fileCountText.textContent = `총 ${uploadedImages.length}장의 사진이 첨부되었습니다.`;
 
     uploadedImages.forEach((imgObj, idx) => {
       const item = document.createElement('div');
@@ -158,68 +165,82 @@
     });
   };
 
-  btnClearAll.addEventListener('click', (e) => {
-    e.stopPropagation();
-    uploadedImages = [];
-    renderPreviews();
-  });
+  if (btnClearAll) {
+    btnClearAll.addEventListener('click', (e) => {
+      e.stopPropagation();
+      uploadedImages = [];
+      renderPreviews();
+    });
+  }
 
-  claimForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    clearError();
+  // 폼 제출 시 유효성 검사 및 분석 요청
+  if (claimForm) {
+    claimForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
 
-    const copayVal = copayInput.value.trim();
-    const nonCoveredVal = nonCoveredInput.value.trim();
-    const copayCost = copayVal ? parseInt(copayVal, 10) : 0;
-    const nonCoveredCost = nonCoveredVal ? parseInt(nonCoveredVal, 10) : 0;
-
-    if (uploadedImages.length === 0 && (copayCost === 0 && nonCoveredCost === 0)) {
-      showError('영수증 사진을 등록하거나, 최소 하나 이상의 진료비 금액을 입력해 주세요.');
-      return;
-    }
-
-    btnSubmit.disabled = true;
-    claimForm.classList.add('hidden');
-    resultBox.classList.add('hidden');
-    loadingBox.classList.remove('hidden');
-    loadingTitle.textContent = `AI가 첨부된 ${uploadedImages.length}장의 서류와 약관을 고속 분석 중입니다...`;
-
-    const payload = {
-      treatmentType: treatmentTypeSelect.value,
-      generation: generationSelect.value,
-      copayCost: copayCost,
-      nonCoveredCost: nonCoveredCost,
-      symptoms: symptomsInput.value.trim() || '허리 요통 및 통증',
-      images: uploadedImages.map(img => img.data)
-    };
-
-    try {
-      const response = await fetch('/api/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `서버 에러 (${response.status})`);
+      // [핵심] 가입 실손 세대 선택 여부 체크
+      if (!generationSelect.value) {
+        showError('가입하신 실손의료보험 세대를 선택해 주세요.');
+        generationSelect.focus();
+        return;
       }
 
-      const result = await response.json();
-      renderResult(result);
+      const copayVal = copayInput.value.trim();
+      const nonCoveredVal = nonCoveredInput.value.trim();
+      const copayCost = copayVal ? parseInt(copayVal, 10) : 0;
+      const nonCoveredCost = nonCoveredVal ? parseInt(nonCoveredVal, 10) : 0;
 
-      loadingBox.classList.add('hidden');
-      resultBox.classList.remove('hidden');
-      resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (uploadedImages.length === 0 && (copayCost === 0 && nonCoveredCost === 0)) {
+        showError('영수증 사진을 등록하거나, 최소 하나 이상의 진료비 금액을 입력해 주세요.');
+        return;
+      }
 
-    } catch (err) {
-      loadingBox.classList.add('hidden');
-      claimForm.classList.remove('hidden');
-      showError(`⚠️ 분석 처리 중 오류가 발생했습니다: ${err.message}`);
-    } finally {
-      btnSubmit.disabled = false;
-    }
-  });
+      btnSubmit.disabled = true;
+      claimForm.classList.add('hidden');
+      resultBox.classList.add('hidden');
+      loadingBox.classList.remove('hidden');
+      if (loadingTitle) {
+        loadingTitle.textContent = `AI가 서류 ${uploadedImages.length}장을 고속 심사 중입니다...`;
+      }
+
+      const payload = {
+        treatmentType: treatmentTypeSelect.value,
+        generation: generationSelect.value,
+        copayCost: copayCost,
+        nonCoveredCost: nonCoveredCost,
+        symptoms: symptomsInput.value.trim() || '허리 요통 및 통증',
+        images: uploadedImages.map(img => img.data)
+      };
+
+      try {
+        const response = await fetch('/api/calculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || `서버 에러 (${response.status})`);
+        }
+
+        const result = await response.json();
+        renderResult(result);
+
+        loadingBox.classList.add('hidden');
+        resultBox.classList.remove('hidden');
+        resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      } catch (err) {
+        loadingBox.classList.add('hidden');
+        claimForm.classList.remove('hidden');
+        showError(`⚠️ 분석 처리 중 오류가 발생했습니다: ${err.message}`);
+      } finally {
+        btnSubmit.disabled = false;
+      }
+    });
+  }
 
   const renderResult = (data) => {
     const summary = data.summary || {};
@@ -255,9 +276,11 @@
     });
   };
 
-  btnRecalc.addEventListener('click', () => {
-    resultBox.classList.add('hidden');
-    claimForm.classList.remove('hidden');
-    claimForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+  if (btnRecalc) {
+    btnRecalc.addEventListener('click', () => {
+      resultBox.classList.add('hidden');
+      claimForm.classList.remove('hidden');
+      claimForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 });

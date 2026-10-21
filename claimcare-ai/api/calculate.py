@@ -2,6 +2,7 @@
 import os
 import re
 import base64
+import time
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler
 from google import genai
@@ -9,17 +10,6 @@ from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
-
-def load_clauses_db() -> dict:
-    base_dir = Path(__file__).resolve().parent.parent
-    db_path = base_dir / "clauses_db.json"
-    if not db_path.exists():
-        db_path = Path("clauses_db.json")
-
-    if db_path.exists():
-        with open(db_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
 
 def extract_json(text: str) -> dict:
     match = re.search(r'\{.*\}', text, re.DOTALL)
@@ -41,21 +31,8 @@ def generate_insurance_claim(data: dict) -> dict:
         images = [data.get("imageData")]
 
     treatment_type = data.get("treatmentType", "외래 통원")
-    generation = data.get("generation", "1~2세대 표준화 실손")
-    copay_cost = int(data.get("copayCost", 0))
-    non_covered_cost = int(data.get("nonCoveredCost", 0))
-    symptoms = data.get("symptoms", "")
+    generation = data.get("generation", "1~2세대 표준화 실손 (2017년 3월 이전)")
 
-    # 1. 로컬 약관 DB 로드
-    db = load_clauses_db()
-    gen_key = "1_2세대"
-    if "4세대" in generation:
-        gen_key = "4세대"
-    elif "3세대" in generation:
-        gen_key = "3세대"
-    matched_clause = db.get("generations", {}).get(gen_key, {})
-
-    # 2. Gemini 멀티모달 프롬프트 구성
     if images:
         contents_parts = []
         for img_str in images:
@@ -74,82 +51,183 @@ def generate_insurance_claim(data: dict) -> dict:
                 )
             )
 
-        prompt = f"""당신은 병원 진료비 영수증/진료비 세부내역서/약국 영수증 전문 대한민국 손해사정 심사관 AI입니다.
-첨부된 {len(images)}장의 서류 이미지들을 상호 대조하고, 내부 데이터베이스 약관 기준을 적용하여 정밀 심사 및 계산을 수행하세요.
+        prompt = """당신은 대한민국 진료비 영수증 전문 고속 OCR 분석 AI입니다.
+첨부된 영수증들을 보고 다음 JSON 형식으로만 즉시 출력하세요 (생각 과정 없이 바로 JSON만 출력):
 
-[내부 DB 약관 기준: {matched_clause.get('name', generation)}]
-{json.dumps(matched_clause, ensure_ascii=False, indent=2)}
-
-★ [손해사정 실무 심사 및 계산 핵심 원칙 - 엄격 준수] ★
-1. 진료 일자별(Day-by-Day) 독립 공제:
-   - 외래 통원은 여러 날짜의 영수증 금액을 단순 합산하여 1회만 공제하면 절대 안 됩니다.
-   - 영수증 상의 '진료 일자'별로 그룹화하여, 방문 일자마다 각각 1회씩 통원 자기부담금(병원급 15,000원, 의원 10,000원 등)을 독립 차감하세요.
-2. 보상 제외 항목 엄격 분리:
-   - 영수증 내 '제증명료', '진료확인서/진단서/소견서 발급비'(예: 3,000원 등)는 의료비가 아니므로 보상 대상 금액에서 전액 제외하세요.
-3. 원외처방 약제비 분리 심사:
-   - 약국 영수증 조제비는 병원비와 합산하지 말고 별도로 심사하세요.
-   - 약제비 발생금액이 1일 최소 공제금액(8,000원) 미만(예: 6,400원)인 경우 지급 보험금은 0원(청구 실익 없음)으로 계산하세요.
-4. 환자 실부담액 정합성:
-   - 총 발생비용 = 모든 영수증 총액
-   - 예상 지급 보험금 = 각 일자별 (보상대상액 - 일자별 공제금)의 합계
-   - 공제 자기부담금 = 총 발생비용 - 예상 지급 보험금 (보상제외 서류비, 일자별 공제금, 약제비 공제 미달분 포함)
-
-반드시 아래 JSON 형식으로만 응답하세요 (백틱 없이 JSON만 출력):
-{{
-  "ocr_detected": {{
-    "copay_cost": 106100,
-    "non_covered_cost": 291000,
-    "symptoms": "요추 추간판탈출증/요통(MRI 검사), 신경차단술 주사치료, 약국 처방"
-  }},
-  "summary": {{
-    "total_cost": 406500,
-    "deductible_amount": 39400,
-    "expected_payout": 367100,
-    "payout_ratio": 90
-  }},
-  "calculation_basis": "일자별 독립 공제 및 보상 제외 항목 정밀 산출 내역 요약 (예: 10/19 병원 207,000원 - 공제 15,000원 = 192,000원 / 10/19 약국 6,400원 공제 8,000원 미달 부지급 / 10/20 병원 193,100원 중 서류비 3,000원 제외 후 190,100원 - 공제 15,000원 = 175,100원 -> 최종 지급액 367,100원)",
+{
+  "daily_breakdown": [
+    {
+      "date": "2026-10-19",
+      "type": "hospital",
+      "total_paid": 207000,
+      "copay": 7000,
+      "non_covered": 200000,
+      "excluded_fees": 0,
+      "description": "요추 MRI"
+    },
+    {
+      "date": "2026-10-19",
+      "type": "pharmacy",
+      "total_paid": 6400,
+      "copay": 6400,
+      "non_covered": 0,
+      "excluded_fees": 0,
+      "description": "처방약제비"
+    },
+    {
+      "date": "2026-10-20",
+      "type": "hospital",
+      "total_paid": 193100,
+      "copay": 99100,
+      "non_covered": 91000,
+      "excluded_fees": 3000,
+      "description": "신경차단술 및 주사 (서류발급비 3,000원)"
+    }
+  ],
+  "symptoms": "요추 추간판탈출증/요통 (MRI 검사 및 신경차단술, 약국 처방)",
   "required_documents": [
-    "진료비 계산서·영수증 원본",
+    "진료비 영수증 원본",
     "진료비 세부내역서",
-    "질병분류기호(M코드) 기재된 처방전 또는 진료확인서",
+    "질병분류기호(M코드) 기재 처방전 또는 진료확인서",
     "MRI 판독결과지"
   ],
   "advisor_tips": [
-    "제증명서 발급비용(3,000원)은 실손의료비 약관상 보상 제외 항목입니다.",
-    "약국 조제비(6,400원)는 통원 약제비 최소 공제금액(8,000원) 미만으로 지급 대상에서 제외되었습니다.",
-    "통원 진료는 방문 일자별로 각각 15,000원씩 독립 공제되었습니다."
+    "제증명서 발급비용은 실손 약관상 보상 제외 항목입니다.",
+    "처방조제 약제비는 1일 공제금액(8,000원) 미만 시 지급 제외됩니다.",
+    "통원 진료는 방문 일자별로 각각 15,000원씩 독립 공제됩니다."
   ]
-}}
+}
 """
         contents_parts.append(prompt)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=contents_parts
-        )
-    else:
-        # 사진 없는 수동 입력 시
-        prompt = f"""당신은 대한민국 실손보험 손해사정 심사 AI입니다.
-가입실손: {generation}, 급여: {copay_cost}원, 비급여: {non_covered_cost}원, 증상: {symptoms}
-약관 DB 기준({matched_clause.get('name', generation)})에 근거하여 예상 지급액과 공제액을 정량 계산하고 JSON으로만 응답하세요:
-{{
-  "ocr_detected": null,
-  "summary": {{
-    "total_cost": {copay_cost + non_covered_cost},
-    "deductible_amount": 15000,
-    "expected_payout": {max(0, copay_cost + non_covered_cost - 15000)},
-    "payout_ratio": 90
-  }},
-  "calculation_basis": "약관 DB 기준 산출 설명",
-  "required_documents": ["진료비 영수증", "진료비 세부내역서"],
-  "advisor_tips": ["청구 시 유의사항"]
-}}
-"""
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
+        
+        # thinking_budget=0 설정으로 생각 과정 생략 및 즉시 응답 유도
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            temperature=0.1
         )
 
-    return extract_json(response.text)
+        # -------------------------------------------------------------
+        # [503 트래픽 과부하 대비 3단계 자동 대체(Fallback) 호출 로직]
+        # -------------------------------------------------------------
+        response = None
+        try:
+            # 1순위: gemini-3.8-flash (초고속)
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=contents_parts,
+                config=config
+            )
+        except Exception as api_err:
+            err_str = str(api_err)
+            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+                time.sleep(1)  # 1초 대기 후 전환
+                try:
+                    # 2순위: gemini-3.8-pro
+                    response = client.models.generate_content(
+                        model="gemini-3.8-pro",
+                        contents=contents_parts,
+                        config=types.GenerateContentConfig(temperature=0.1)
+                    )
+                except Exception:
+                    # 3순위: gemini-3-flash
+                    response = client.models.generate_content(
+                        model="gemini-3-flash",
+                        contents=contents_parts,
+                        config=types.GenerateContentConfig(temperature=0.1)
+                    )
+            else:
+                raise api_err
+
+        ai_data = extract_json(response.text)
+
+        # -------------------------------------------------------------
+        # [파이썬 손해사정 확정 계산 엔진 - 오차 없는 정밀 계산]
+        # -------------------------------------------------------------
+        daily_list = ai_data.get("daily_breakdown", [])
+        total_cost = 0
+        total_payout = 0
+        basis_logs = []
+
+        total_copay = 0
+        total_non_covered = 0
+
+        for item in daily_list:
+            cost = item.get("total_paid", 0)
+            item_type = item.get("type", "hospital")
+            excluded = item.get("excluded_fees", 0)
+            dt = item.get("date", "해당일")
+            total_cost += cost
+            total_copay += item.get("copay", 0)
+            total_non_covered += item.get("non_covered", 0)
+
+            claimable = max(0, cost - excluded)
+
+            if item_type == "pharmacy":
+                # 처방조제 약제비: 8,000원 공제
+                if claimable > 8000:
+                    payout = claimable - 8000
+                    basis_logs.append(f"{dt} 약국 {cost:,}원 (8,000원 공제 후 {payout:,}원)")
+                else:
+                    payout = 0
+                    basis_logs.append(f"{dt} 약국 {cost:,}원 (8,000원 미달 부지급)")
+            else:
+                # 병원 외래 공제 적용
+                deduct = 15000
+                if "4세대" in generation:
+                    deduct = max(int(item.get("copay", 0) * 0.2) + int(item.get("non_covered", 0) * 0.3), 20000)
+                elif "3세대" in generation:
+                    deduct = max(int(item.get("copay", 0) * 0.1) + int(item.get("non_covered", 0) * 0.2), 15000)
+                
+                payout = max(0, claimable - deduct)
+                ex_text = f" (서류비 {excluded:,}원 제외)" if excluded > 0 else ""
+                basis_logs.append(f"{dt} 병원 {cost:,}원{ex_text} - 공제 {deduct:,}원 = {payout:,}원")
+
+            total_payout += payout
+
+        total_deductible = total_cost - total_payout
+        payout_ratio = round((total_payout / total_cost) * 100) if total_cost > 0 else 0
+
+        return {
+            "ocr_detected": {
+                "copay_cost": total_copay,
+                "non_covered_cost": total_non_covered,
+                "symptoms": ai_data.get("symptoms", "척추 및 관절 질환")
+            },
+            "summary": {
+                "total_cost": total_cost,
+                "deductible_amount": total_deductible,
+                "expected_payout": total_payout,
+                "payout_ratio": payout_ratio
+            },
+            "calculation_basis": " / ".join(basis_logs) + f" -> 최종 예상 지급액: {total_payout:,}원 (실부담금: {total_deductible:,}원)",
+            "required_documents": ai_data.get("required_documents", [
+                "진료비 영수증 원본", "진료비 세부내역서", "처방전 또는 진료확인서"
+            ]),
+            "advisor_tips": ai_data.get("advisor_tips", [
+                "제증명서 발급비용은 실손 약관상 보상 제외 항목입니다.",
+                "통원 진료는 방문 일자별로 각각 15,000원씩 독립 공제됩니다."
+            ])
+        }
+
+    else:
+        copay_cost = int(data.get("copayCost", 0))
+        non_covered_cost = int(data.get("nonCoveredCost", 0))
+        total_cost = copay_cost + non_covered_cost
+        deduct = 15000
+        payout = max(0, total_cost - deduct)
+
+        return {
+            "ocr_detected": None,
+            "summary": {
+                "total_cost": total_cost,
+                "deductible_amount": deduct,
+                "expected_payout": payout,
+                "payout_ratio": 90
+            },
+            "calculation_basis": f"수동 입력 기준: 총 진료비 {total_cost:,}원 - 통원 1회 공제 {deduct:,}원 = {payout:,}원",
+            "required_documents": ["진료비 영수증", "진료비 세부내역서"],
+            "advisor_tips": ["실제 청구 시 서류발급비 등 비보상 항목 유무를 확인하세요."]
+        }
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
