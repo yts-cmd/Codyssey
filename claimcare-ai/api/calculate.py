@@ -53,8 +53,8 @@ def generate_insurance_claim(data: dict) -> dict:
                 )
             )
 
-        prompt = """당신은 대한민국 진료비 영수증 전문 OCR 분석 AI입니다.
-첨부된 영수증들을 판독하여 다음 JSON 형식으로만 즉시 응답하세요 (백틱이나 부가설명 없이 JSON만 출력):
+        prompt = """당신은 대한민국 진료비 영수증 전문 OCR 분석 손해사정 AI입니다.
+첨부된 영수증들을 판독하여 다음 JSON 형식으로만 즉각 응답하세요 (백틱이나 설명 없이 JSON만 출력):
 
 {
   "daily_breakdown": [
@@ -102,23 +102,23 @@ def generate_insurance_claim(data: dict) -> dict:
 """
         contents_parts.append(prompt)
 
-        # 404 에러가 없는 정식 지원 모델명 목록
-        candidate_models = ["gemini-2.5-flash", "gemini-1.5-flash"]
+        # UI에서 확인된 최신 모델 적용
+        candidate_models = ["gemini-3.8-flash", "gemini-3.1-pro"]
         response = None
         last_error = None
 
-        print("[AI 엔진] 3. Gemini API 모델 호출 시작...")
+        print("[AI 엔진] 3. 최신 Gemini 모델 호출 시작...")
         start_time = time.time()
 
         for model_name in candidate_models:
             try:
-                print(f"[AI 엔진] ➡️ '{model_name}' 모델 시도 중...")
+                print(f"[AI 엔진] ➡️ '{model_name}' 모델 호출 중...")
                 response = client.models.generate_content(
                     model=model_name,
                     contents=contents_parts,
                     config=types.GenerateContentConfig(temperature=0.1)
                 )
-                print(f"[AI 엔진] ✅ '{model_name}' 응답 수신 완료! (소요시간: {time.time() - start_time:.2f}초)")
+                print(f"[AI 엔진] ✅ '{model_name}' 응답 성공! (소요시간: {time.time() - start_time:.2f}초)")
                 break
             except Exception as e:
                 print(f"[AI 엔진] ⚠️ '{model_name}' 호출 실패: {e}")
@@ -175,7 +175,7 @@ def generate_insurance_claim(data: dict) -> dict:
         total_deductible = total_cost - total_payout
         payout_ratio = round((total_payout / total_cost) * 100) if total_cost > 0 else 0
 
-        print(f"[AI 엔진] 4. 최종 정산 완료 -> 총비용: {total_cost:,}원 / 환급금: {total_payout:,}원")
+        print(f"[AI 엔진] 4. 정산 완료: 총 진료비 {total_cost:,}원 / 지급 예정액 {total_payout:,}원")
 
         return {
             "ocr_detected": {

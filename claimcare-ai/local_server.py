@@ -1,6 +1,7 @@
 ﻿import os
 import sys
 import json
+import importlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from dotenv import load_dotenv
@@ -8,17 +9,10 @@ from dotenv import load_dotenv
 # 환경변수 로드
 load_dotenv()
 
-# 프로젝트 루트 경로
 BASE_DIR = Path(__file__).resolve().parent
-
-# calculate 모듈 핸들러 로드
 sys.path.append(str(BASE_DIR))
-try:
-    from api.calculate import generate_insurance_claim
-except ImportError:
-    generate_insurance_claim = None
 
-class ThreadedAppHandler(SimpleHTTPRequestHandler):
+class DynamicAppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(BASE_DIR), **kwargs)
 
@@ -29,10 +23,13 @@ class ThreadedAppHandler(SimpleHTTPRequestHandler):
                 post_data = self.rfile.read(content_length)
                 data = json.loads(post_data.decode("utf-8"))
 
-                if not generate_insurance_claim:
-                    raise RuntimeError("api/calculate.py 모듈을 불러올 수 없습니다.")
+                # [핵심] calculate 모듈을 매번 강제로 새로고침하여 캐시 잔여 차단
+                if "api.calculate" in sys.modules:
+                    calc_module = importlib.reload(sys.modules["api.calculate"])
+                else:
+                    calc_module = importlib.import_module("api.calculate")
 
-                result = generate_insurance_claim(data)
+                result = calc_module.generate_insurance_claim(data)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -61,13 +58,13 @@ class ThreadedAppHandler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     PORT = 8000
-    server = ThreadingHTTPServer(("", PORT), ThreadedAppHandler)
+    server = ThreadingHTTPServer(("", PORT), DynamicAppHandler)
     print("=" * 60)
-    print("🚀 [멀티스레드 고속 모드] 클레임케어 AI 서버 실행 중")
+    print("🚀 [동적 리로드 적용] 클레임케어 AI 서버 실행 중")
     print(f"👉 브라우저 접속: http://localhost:{PORT}")
     print("=" * 60)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n서버를 종료합니다.")
+        print("\n서버 종료")
         server.server_close()

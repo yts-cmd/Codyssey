@@ -7,30 +7,29 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- 상단 네비게이션 -->
+  <!-- 상단 네비게이션 (3개 섹션 메뉴 이동) -->
   <header class="navbar">
     <div class="nav-container">
       <a href="#" class="nav-logo">🩺 클레임케어 AI</a>
       <nav class="nav-menu">
-        <a href="#calculator" class="nav-link">AI 영수증 분석 & 계산기</a>
-        <a href="#faq" class="nav-link">실손 가이드 & FAQ</a>
+        <a href="#calculator" class="nav-link">1. AI 분석 & 계산기</a>
+        <a href="#faq" class="nav-link">2. 세대별 가이드</a>
+        <a href="#checklist" class="nav-link">3. 청구 서류 체크리스트</a>
       </nav>
     </div>
   </header>
 
-  <!-- 메인 히어로 & 계산기 영역 -->
   <main class="container">
+    <!-- 섹션 1: AI 계산기 -->
     <section id="calculator" class="section">
       <div class="section-header">
-        <span class="badge">Gemini OCR & 약관 DB 엔진</span>
+        <span class="badge">Gemini Vision OCR & 손해사정 심사 엔진</span>
         <h1 class="section-title">📊 AI 다중 영수증 OCR & 실손보험금 계산기</h1>
         <p class="section-subtitle">영수증·세부내역서 사진을 여러 장 첨부하거나 직접 숫자를 입력하여 계산할 수 있습니다.</p>
       </div>
 
       <div class="calc-wrapper">
-        <!-- 분석 입력 폼 -->
         <form id="claim-form" class="calc-form">
-          <!-- 사진 다중 업로드 드롭존 -->
           <div class="form-group">
             <div id="drop-zone" class="upload-zone">
               <input type="file" id="file-input" class="file-input-hidden" accept="image/*" multiple>
@@ -47,7 +46,6 @@
             </div>
           </div>
 
-          <!-- 진료 구분 -->
           <div class="form-group">
             <label for="treatment-type">진료 구분 <span class="required">*</span></label>
             <select id="treatment-type" name="treatmentType" required>
@@ -58,7 +56,6 @@
             </select>
           </div>
 
-          <!-- 가입 실손의료보험 세대 (기본 빈값 선택 강제) -->
           <div class="form-group">
             <label for="generation">가입 실손의료보험 세대 <span class="required">*</span></label>
             <select id="generation" name="generation" required>
@@ -70,7 +67,6 @@
             </select>
           </div>
 
-          <!-- 진료비 직접 입력란 (급여 / 비급여) -->
           <div class="form-row">
             <div class="form-group col">
               <label for="copay-cost">급여 본인부담금 (원) <span class="text-hint">(사진 첨부 시 비워도 자동 판독)</span></label>
@@ -82,29 +78,24 @@
             </div>
           </div>
 
-          <!-- 진단명 및 치료 내용 (선택사항) -->
           <div class="form-group">
             <label for="symptoms">진단명 및 치료 내용 <span class="text-hint">(선택사항 - 사진 첨부 시 비워도 자동 판독)</span></label>
             <input type="text" id="symptoms" name="symptoms" placeholder="예: 허리 요통으로 엑스레이 및 신경치료 주사치료받음">
           </div>
 
-          <!-- 에러 메시지 알림 박스 -->
           <div id="form-error" class="alert-box alert-error hidden"></div>
 
-          <!-- 계산하기 버튼 -->
           <button type="submit" id="btn-submit" class="btn btn-primary btn-submit">
             <span class="btn-text">AI 종합 분석 및 보험금 계산하기</span>
           </button>
         </form>
 
-        <!-- 로딩 인디케이터 (1~5분 안내 문구 반영) -->
         <div id="loading-box" class="loading-container hidden">
           <div class="pulse-loader"></div>
           <h3 id="loading-title" class="loading-title">AI가 첨부된 사진들과 실손 약관을 종합 분석 중입니다...</h3>
           <p class="loading-desc">여러 장의 영수증 OCR 판독 및 정밀 공제 계산에 약 1~5분 정도 소요될 수 있습니다. 창을 닫지 마세요.</p>
         </div>
 
-        <!-- 계산 결과 리포트 카드 -->
         <div id="result-box" class="result-card hidden">
           <div class="result-header">
             <h3>📋 AI 실손보험금 분석 리포트</h3>
@@ -150,7 +141,7 @@
       </div>
     </section>
 
-    <!-- 실손 가이드 & FAQ -->
+    <!-- 섹션 2: 세대별 가이드 -->
     <section id="faq" class="section guide-section">
       <div class="section-header">
         <h2 class="section-title">📊 실손보험 세대별 공제 가이드 & FAQ</h2>
@@ -172,6 +163,32 @@
           <span class="gen-tag">1~2세대 실손 (~2017.3)</span>
           <h3>낮은 자기부담금 구조</h3>
           <p>통원 1회당 의원 1만 원, 종합병원 1.5만 원 등 고정 정액 공제 위주라 환급률이 높지만, 갱신 시 보험료 인상 폭이 큽니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 섹션 3: 청구 서류 체크리스트 (신규 추가 섹션) -->
+    <section id="checklist" class="section guide-section" style="border-top: 1px solid var(--border-color, #e2e8f0); padding-top: 3rem;">
+      <div class="section-header">
+        <h2 class="section-title">📑 실손보험 청구 필수 서류 안내</h2>
+        <p class="section-subtitle">보험금 부지급 및 보완 요청을 방지하기 위해 제출 전 반드시 확인하세요.</p>
+      </div>
+
+      <div class="guide-grid">
+        <div class="guide-card">
+          <span class="gen-tag">기본 필수 서류</span>
+          <h3>진료비 계산서·영수증 및 세부내역서</h3>
+          <p>카드 결제 전표는 인정되지 않으며, 급여/비급여와 전액본인부담금이 구분 기재된 병원 정식 영수증과 세부내역서가 필수입니다.</p>
+        </div>
+        <div class="guide-card">
+          <span class="gen-tag">통원 3만~10만 원 초과</span>
+          <h3>질병분류기호(M코드 등) 기재 서류</h3>
+          <p>처방전(질병코드 기재용 무료 발급), 진료확인서, 통원확인서, 소견서 중 하나를 제출하여 질병 확정 진단을 증빙해야 합니다.</p>
+        </div>
+        <div class="guide-card">
+          <span class="gen-tag">비보상 제외 항목</span>
+          <h3>제증명 수수료 보상 불가 주의</h3>
+          <p>진단서, 진료확인서 발급비용(일반적으로 3,000~20,000원)은 실손의료비 약관상 보상 대상에서 제외(면책)됩니다.</p>
         </div>
       </div>
     </section>
