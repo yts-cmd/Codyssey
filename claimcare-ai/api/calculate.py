@@ -54,7 +54,7 @@ def generate_insurance_claim(data: dict) -> dict:
             )
 
         prompt = """당신은 대한민국 진료비 영수증 전문 OCR 분석 손해사정 AI입니다.
-첨부된 영수증들을 판독하여 다음 JSON 형식으로만 즉각 응답하세요 (백틱이나 설명 없이 JSON만 출력):
+첨부된 영수증들을 판독하여 다음 JSON 형식으로만 즉각 응답하세요 (백틱이나 부가설명 없이 JSON만 출력):
 
 {
   "daily_breakdown": [
@@ -102,17 +102,17 @@ def generate_insurance_claim(data: dict) -> dict:
 """
         contents_parts.append(prompt)
 
-        # UI에서 확인된 최신 모델 적용
-        candidate_models = ["gemini-3.8-flash", "gemini-3.1-pro"]
+        # 구글 공식 최신 모델 목록으로 갱신
+        candidate_models = ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview"]
         response = None
         last_error = None
 
-        print("[AI 엔진] 3. 최신 Gemini 모델 호출 시작...")
+        print("[AI 엔진] 3. Gemini 최신 API 모델 호출 시작...")
         start_time = time.time()
 
         for model_name in candidate_models:
             try:
-                print(f"[AI 엔진] ➡️ '{model_name}' 모델 호출 중...")
+                print(f"[AI 엔진] ➡️ '{model_name}' 시도 중...")
                 response = client.models.generate_content(
                     model=model_name,
                     contents=contents_parts,
@@ -121,7 +121,7 @@ def generate_insurance_claim(data: dict) -> dict:
                 print(f"[AI 엔진] ✅ '{model_name}' 응답 성공! (소요시간: {time.time() - start_time:.2f}초)")
                 break
             except Exception as e:
-                print(f"[AI 엔진] ⚠️ '{model_name}' 호출 실패: {e}")
+                print(f"[AI 엔진] ⚠️ '{model_name}' 실패: {e}")
                 last_error = e
                 time.sleep(1)
 
@@ -175,7 +175,7 @@ def generate_insurance_claim(data: dict) -> dict:
         total_deductible = total_cost - total_payout
         payout_ratio = round((total_payout / total_cost) * 100) if total_cost > 0 else 0
 
-        print(f"[AI 엔진] 4. 정산 완료: 총 진료비 {total_cost:,}원 / 지급 예정액 {total_payout:,}원")
+        print(f"[AI 엔진] 4. 최종 정산 완료 -> 총비용: {total_cost:,}원 / 환급금: {total_payout:,}원")
 
         return {
             "ocr_detected": {
@@ -220,6 +220,24 @@ def generate_insurance_claim(data: dict) -> dict:
         }
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # 루트 접속 시 index.html 파일 응답
+        try:
+            html_path = Path(__file__).resolve().parent.parent / "index.html"
+            if not html_path.exists():
+                html_path = Path("index.html")
+            with open(html_path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(b"<h1>ClaimCare AI Server is Running</h1>")
+
     def do_POST(self):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
@@ -231,7 +249,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
             self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             self.end_headers()
             self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
@@ -247,6 +265,6 @@ class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
